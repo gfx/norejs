@@ -2,11 +2,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include <JavaScriptCore/JavaScriptCore.h>
 #define UNUSED __attribute__((unused))
 
-const char* commandTitle = "nore";
+const char* const CommandTitle   = "nore";
+const char* const CommandVersion = "v0.0.1";
 
 static void printJSError(JSContextRef ctx, JSValueRef exception);
 
@@ -125,10 +127,15 @@ skipShebang(FILE* const fp) {
     }
 }
 
+static void usage() {
+    printf("Usage:\n");
+    printf("    %s file args...\n", CommandTitle);
+}
+
 int main(int argc, char** argv) {
 
     if (argc == 1) {
-        // TODO: interactive mode?
+        usage();
         exit(0);
     }
     const char* const fileName = argv[1];
@@ -155,7 +162,8 @@ int main(int argc, char** argv) {
         setProperty(ctx, jobjGlobal, "process", jsProcess);
 
         setProperty(ctx, jsProcess, "env", JSObjectMake(ctx, NULL, NULL));
-        setProperty(ctx, jsProcess, "title", makeJSObjectFromCString(ctx, commandTitle));
+        setProperty(ctx, jsProcess, "title",   makeJSObjectFromCString(ctx, CommandTitle));
+        setProperty(ctx, jsProcess, "version", makeJSObjectFromCString(ctx, CommandVersion));
 
         // argv
         JSValueRef jvals[argc];
