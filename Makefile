@@ -1,3 +1,3 @@
 
-nore: main.cc
-	$(CXX) -Wall -Wextra -g -framework JavaScriptCore -o $@ $<
+nore: main.c
+	$(CC) -Wall -Wextra -g -framework JavaScriptCore -o $@ $<
