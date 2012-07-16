@@ -43,6 +43,9 @@ printToStdoutFunc(
 
     for (size_t i = 0; i < argLen; ++i) {
         printJSValueRef(ctx, args[i], stdout, exception);
+        if ((i + 1) < argLen) {
+            fputs(" ", stdout);
+        }
     }
     fputs("\n", stdout);
 
@@ -60,6 +63,9 @@ printToStderrFunc(
 
     for (size_t i = 0; i < argLen; ++i) {
         printJSValueRef(ctx, args[i], stderr, exception);
+        if ((i + 1) < argLen) {
+            fputs(" ", stderr);
+        }
     }
     fputs("\n", stderr);
 
