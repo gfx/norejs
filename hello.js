@@ -1,4 +1,4 @@
 
-print("hello, world!");
-
 console.log("hello, world!");
+
+console.log("argv: " + JSON.stringify(process.argv));

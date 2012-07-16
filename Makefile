@@ -1,3 +1,9 @@
 
+OPTIMIZE := -O4
+
+hello: nore
+	./nore hello.js
+
 nore: main.c
-	$(CC) -Wall -Wextra -g -framework JavaScriptCore -o $@ $<
+	$(CC) $(OPTIMIZE) -Wall -Wextra -g -framework JavaScriptCore -o $@ $<
+

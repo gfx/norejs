@@ -6,6 +6,8 @@
 #include <JavaScriptCore/JavaScriptCore.h>
 #define UNUSED __attribute__((unused))
 
+const char* commandTitle = "nore";
+
 static void printJSError(JSContextRef ctx, JSValueRef exception);
 
 static void
@@ -31,7 +33,7 @@ printJSError(JSContextRef ctx, JSValueRef exception) {
 }
 
 static JSValueRef
-jsGlobalPrint(
+printToStdoutFunc(
     JSContextRef        ctx,
     JSObjectRef         jobj     UNUSED,
     JSObjectRef         jobjThis UNUSED,
@@ -45,6 +47,56 @@ jsGlobalPrint(
     fputs("\n", stdout);
 
     return JSValueMakeUndefined(ctx);
+}
+
+static JSValueRef
+printToStderrFunc(
+    JSContextRef        ctx,
+    JSObjectRef         jobj     UNUSED,
+    JSObjectRef         jobjThis UNUSED,
+    size_t              argLen,
+    const JSValueRef    args[],
+    JSValueRef*         exception) {
+
+    for (size_t i = 0; i < argLen; ++i) {
+        printJSValueRef(ctx, args[i], stderr, exception);
+    }
+    fputs("\n", stderr);
+
+    return JSValueMakeUndefined(ctx);
+}
+
+static JSValueRef
+makeJSValueFromCString(JSContextRef ctx, const char* cstr) {
+    JSStringRef jstr = JSStringCreateWithUTF8CString(cstr);
+    JSValueRef  jval = JSValueMakeString(ctx, jstr);
+    JSStringRelease(jstr);
+    return jval;
+}
+
+static JSObjectRef
+makeJSObjectFromCString(JSContextRef ctx, const char* cstr) {
+    JSValueRef exception = NULL;
+    JSObjectRef jobj = JSValueToObject(ctx, makeJSValueFromCString(ctx, cstr), &exception);
+    if (exception) {
+        printJSError(ctx, exception);
+    }
+    return jobj;
+}
+
+static void
+setProperty(JSContextRef ctx, JSObjectRef obj, const char* name, JSObjectRef value) {
+    JSStringRef jstrName = JSStringCreateWithUTF8CString(name);
+    JSObjectSetProperty(ctx, obj, jstrName, value, kJSPropertyAttributeNone, NULL);
+    JSStringRelease(jstrName);
+}
+
+static void
+setFunc(JSContextRef ctx, JSObjectRef obj, const char* name, JSObjectCallAsFunctionCallback fun) {
+    JSStringRef jstrName = JSStringCreateWithUTF8CString(name);
+    JSObjectRef jobjFunc = JSObjectMakeFunctionWithCallback(ctx, jstrName , fun);
+    JSObjectSetProperty(ctx, obj, jstrName, jobjFunc, kJSPropertyAttributeNone, NULL);
+    JSStringRelease(jstrName);
 }
 
 int main(int argc, char** argv) {
@@ -62,10 +114,30 @@ int main(int argc, char** argv) {
     JSObjectRef jobjGlobal = JSContextGetGlobalObject(ctx);
 
     // setup node-like environment (console and process)
-    JSStringRef jstrPrint  = JSStringCreateWithUTF8CString("print");
-    JSObjectRef jfuncPrint = JSObjectMakeFunctionWithCallback(ctx, jstrPrint, jsGlobalPrint);
-    JSObjectSetProperty(ctx, jobjGlobal, jstrPrint, jfuncPrint, kJSPropertyAttributeNone, NULL);
-    JSStringRelease(jstrPrint);
+
+    {
+        JSObjectRef jsConsole = JSObjectMake(ctx, NULL, NULL);
+        setProperty(ctx, jobjGlobal, "console", jsConsole);
+        setFunc(ctx, jsConsole, "log",   printToStdoutFunc);
+        setFunc(ctx, jsConsole, "info",  printToStdoutFunc);
+        setFunc(ctx, jsConsole, "warn",  printToStderrFunc);
+        setFunc(ctx, jsConsole, "error", printToStderrFunc);
+    }
+
+    {
+        JSObjectRef jsProcess = JSObjectMake(ctx, NULL, NULL);
+        setProperty(ctx, jobjGlobal, "process", jsProcess);
+
+        setProperty(ctx, jsProcess, "env", JSObjectMake(ctx, NULL, NULL));
+        setProperty(ctx, jsProcess, "title", makeJSObjectFromCString(ctx, commandTitle));
+
+        // argv
+        JSValueRef jvals[argc];
+        for (int i = 0; i < argc; ++i) {
+            jvals[i] = makeJSValueFromCString(ctx, argv[i]);
+        }
+        setProperty(ctx, jsProcess, "argv", JSObjectMakeArray(ctx, argc, jvals, NULL));
+    }
 
     JSStringRef sourceContent = NULL;
     {
