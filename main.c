@@ -99,6 +99,26 @@ setFunc(JSContextRef ctx, JSObjectRef obj, const char* name, JSObjectCallAsFunct
     JSStringRelease(jstrName);
 }
 
+static void
+skipShebang(FILE* const fp) {
+    int c = fgetc(fp);
+    if (c == EOF) {
+        return;
+    }
+
+    if (c == '#') { // ignore shebang
+        while ((c = fgetc(fp)) != EOF) {
+            if (c == '\r' || c == '\n') {
+                ungetc(c, fp);
+                return;
+            }
+        }
+    }
+    else {
+        ungetc(c, fp);
+    }
+}
+
 int main(int argc, char** argv) {
 
     if (argc == 1) {
@@ -156,6 +176,9 @@ int main(int argc, char** argv) {
         assert(buffer);
         size_t total = 0;
         size_t nread = 0;
+
+        skipShebang(fp);
+
         while ((nread = fread(buffer + total, fileSize, sizeof(char), fp)) > 0) {
             total += nread;
         }
