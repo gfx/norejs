@@ -20,7 +20,7 @@ printJSValueRef(JSContextRef ctx, JSValueRef arg, FILE* fp, JSValueRef* exceptio
     size_t const  maxSize = JSStringGetMaximumUTF8CStringSize(jstr);
     char* const   buffer  =  (char*)malloc(maxSize);
     size_t const  size    = JSStringGetUTF8CString(jstr, buffer, maxSize);
-    fwrite(buffer, size, 1, fp);
+    fwrite(buffer, size - 1 /* because nul included */, 1, fp);
     free(buffer);
     JSStringRelease(jstr);
 }
