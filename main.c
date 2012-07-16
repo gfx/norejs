@@ -127,96 +127,106 @@ skipShebang(FILE* const fp) {
     }
 }
 
+static void
+setupJSGlobals(JSContextRef ctx, JSObjectRef jobjGlobal, int argc, const char** argv) {
+    // console
+    JSObjectRef jsConsole = JSObjectMake(ctx, NULL, NULL);
+    setProperty(ctx, jobjGlobal, "console", jsConsole);
+    setFunc(ctx, jsConsole, "log",   printToStdoutFunc);
+    setFunc(ctx, jsConsole, "info",  printToStdoutFunc);
+    setFunc(ctx, jsConsole, "warn",  printToStderrFunc);
+    setFunc(ctx, jsConsole, "error", printToStderrFunc);
+
+    // process
+    JSObjectRef jsProcess = JSObjectMake(ctx, NULL, NULL);
+    setProperty(ctx, jobjGlobal, "process", jsProcess);
+
+    setProperty(ctx, jsProcess, "env", JSObjectMake(ctx, NULL, NULL));
+    setProperty(ctx, jsProcess, "title",   makeJSObjectFromCString(ctx, CommandTitle));
+    setProperty(ctx, jsProcess, "version", makeJSObjectFromCString(ctx, CommandVersion));
+
+    // process.argv
+    JSValueRef jvals[argc];
+    for (int i = 0; i < argc; ++i) {
+        jvals[i] = makeJSValueFromCString(ctx, argv[i]);
+    }
+    setProperty(ctx, jsProcess, "argv", JSObjectMakeArray(ctx, argc, jvals, NULL));
+}
+
+static JSStringRef readSourceFile(JSContextRef ctx UNUSED, const char* fileName) {
+    struct stat st;
+    if (stat(fileName, &st) != 0) {
+        perror("failed to stat");
+        return NULL;
+    }
+    size_t const fileSize = (size_t)st.st_size;
+    FILE* fp = fopen(fileName, "r");
+    if (! fp) {
+        perror("failed to open");
+        return NULL;
+    }
+    void* const buffer = calloc(fileSize + 1, sizeof(char));
+    assert(buffer);
+    size_t total = 0;
+    size_t nread = 0;
+
+    skipShebang(fp);
+
+    while ((nread = fread(buffer + total, fileSize, sizeof(char), fp)) > 0) {
+        total += nread;
+    }
+
+    if (ferror(fp)) {
+        perror("failed to read");
+        return NULL;
+    }
+    return JSStringCreateWithUTF8CString((const char*)buffer);
+}
+
 static void usage() {
     printf("Usage:\n");
     printf("    %s file args...\n", CommandTitle);
 }
 
-int main(int argc, char** argv) {
+int main(int argc, const char** argv) {
 
     if (argc == 1) {
         usage();
-        exit(0);
+        return 0;
     }
     const char* const fileName = argv[1];
 
-    JSValueRef exception = NULL;
+    int exitStatus = 0;
 
     // initialize globals
     JSGlobalContextRef ctx = JSGlobalContextCreate(NULL);
     JSObjectRef jobjGlobal = JSContextGetGlobalObject(ctx);
 
-    // setup node-like environment (console and process)
+    setupJSGlobals(ctx, jobjGlobal, argc, argv);
 
-    {
-        JSObjectRef jsConsole = JSObjectMake(ctx, NULL, NULL);
-        setProperty(ctx, jobjGlobal, "console", jsConsole);
-        setFunc(ctx, jsConsole, "log",   printToStdoutFunc);
-        setFunc(ctx, jsConsole, "info",  printToStdoutFunc);
-        setFunc(ctx, jsConsole, "warn",  printToStderrFunc);
-        setFunc(ctx, jsConsole, "error", printToStderrFunc);
+    JSStringRef sourceContent = readSourceFile(ctx, fileName);
+    if (sourceContent != NULL) {
+        JSStringRef sourceFile = JSStringCreateWithUTF8CString(fileName);
+        JSValueRef exception = NULL;
+
+        // execute script
+        JSEvaluateScript(ctx, sourceContent, jobjGlobal, sourceFile, 1, &exception);
+
+        if (exception != NULL) {
+            printJSError(ctx, exception);
+            exitStatus = 1;
+        }
+
+        JSStringRelease(sourceFile);
+        JSStringRelease(sourceContent);
     }
-
-    {
-        JSObjectRef jsProcess = JSObjectMake(ctx, NULL, NULL);
-        setProperty(ctx, jobjGlobal, "process", jsProcess);
-
-        setProperty(ctx, jsProcess, "env", JSObjectMake(ctx, NULL, NULL));
-        setProperty(ctx, jsProcess, "title",   makeJSObjectFromCString(ctx, CommandTitle));
-        setProperty(ctx, jsProcess, "version", makeJSObjectFromCString(ctx, CommandVersion));
-
-        // argv
-        JSValueRef jvals[argc];
-        for (int i = 0; i < argc; ++i) {
-            jvals[i] = makeJSValueFromCString(ctx, argv[i]);
-        }
-        setProperty(ctx, jsProcess, "argv", JSObjectMakeArray(ctx, argc, jvals, NULL));
-    }
-
-    JSStringRef sourceContent = NULL;
-    {
-        struct stat st;
-        if (stat(fileName, &st) != 0) {
-            perror("failed to stat");
-            return 1;
-        }
-        size_t const fileSize = (size_t)st.st_size;
-        FILE* fp = fopen(fileName, "r");
-        if (! fp) {
-            perror("failed to open");
-            return 1;
-        }
-        void* const buffer = calloc(fileSize + 1, sizeof(char));
-        assert(buffer);
-        size_t total = 0;
-        size_t nread = 0;
-
-        skipShebang(fp);
-
-        while ((nread = fread(buffer + total, fileSize, sizeof(char), fp)) > 0) {
-            total += nread;
-        }
-
-        if (ferror(fp)) {
-            perror("failed to read");
-            return 1;
-        }
-        sourceContent = JSStringCreateWithUTF8CString((const char*)buffer);
-    }
-    JSStringRef sourceFile = JSStringCreateWithUTF8CString(fileName);
-
-    // execute script
-    JSEvaluateScript(ctx, sourceContent, jobjGlobal, sourceFile, 1, &exception);
-    JSStringRelease(sourceContent);
-    JSStringRelease(sourceFile);
-
-    if (exception != NULL) {
-        printJSError(ctx, exception);
+    else {
+        exitStatus = 1;
     }
 
     // finalize globals
     JSGarbageCollect(ctx);
     JSGlobalContextRelease(ctx);
-    return 0;
+    return exitStatus;
 }
 
