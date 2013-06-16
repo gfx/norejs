@@ -75,6 +75,26 @@ printToStderrFunc(
 }
 
 static JSValueRef
+setTimeoutFunc(
+    JSContextRef        ctx,
+    JSObjectRef         jobj     UNUSED,
+    JSObjectRef         jobjThis,
+    size_t              argLen,
+    const JSValueRef    args[], /* (func, duration) */
+    JSValueRef*         exception) {
+
+    if (argLen != 2) {
+        return JSValueMakeUndefined(ctx);
+    }
+
+    JSObjectCallAsFunction(ctx, JSValueToObject(ctx, args[0], exception), jobjThis, 0, NULL, exception);
+
+    return JSValueMakeUndefined(ctx);
+}
+
+// ---
+
+static JSValueRef
 makeJSValueFromCString(JSContextRef ctx, const char* cstr) {
     JSStringRef jstr = JSStringCreateWithUTF8CString(cstr);
     JSValueRef  jval = JSValueMakeString(ctx, jstr);
@@ -151,6 +171,9 @@ setupJSGlobals(JSContextRef ctx, JSObjectRef jobjGlobal, int argc, const char** 
         jvals[i] = makeJSValueFromCString(ctx, argv[i]);
     }
     setProperty(ctx, jsProcess, "argv", JSObjectMakeArray(ctx, argc, jvals, NULL));
+
+    // setTimeout()
+    setFunc(ctx, jobjGlobal, "setTimeout",   setTimeoutFunc);
 }
 
 static JSStringRef readSourceFile(JSContextRef ctx UNUSED, const char* fileName) {
