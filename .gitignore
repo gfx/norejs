@@ -2,4 +2,5 @@
 *.swp
 nore
 *.jsx.js
-
+lib/
+include/

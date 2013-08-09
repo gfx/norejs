@@ -5,6 +5,9 @@
 #include <unistd.h>
 
 #include <JavaScriptCore/JavaScriptCore.h>
+
+#include "uv.h"
+
 #define UNUSED __attribute__((unused))
 
 const char* const CommandTitle   = "nore";
@@ -75,7 +78,7 @@ printToStderrFunc(
 }
 
 static JSValueRef
-setTimeoutFunc(
+setTimeoutFunc( // TODO use an actual event loop like UV
     JSContextRef        ctx,
     JSObjectRef         jobj     UNUSED,
     JSObjectRef         jobjThis,
@@ -127,6 +130,25 @@ setFunc(JSContextRef ctx, JSObjectRef obj, const char* name, JSObjectCallAsFunct
     JSStringRelease(jstrName);
 }
 
+static JSValueRef
+getMemoryUsage(
+    JSContextRef        ctx,
+    JSObjectRef         jobj     UNUSED,
+    JSObjectRef         jobjThis UNUSED,
+    size_t              argLen UNUSED,
+    const JSValueRef    args[] UNUSED,
+    JSValueRef*         exception) {
+
+    size_t rss = 0;
+    int const err UNUSED = uv_resident_set_memory(&rss); // see node/src/node.cc
+
+    JSObjectRef const retval = JSObjectMake(ctx, NULL, NULL);
+    setProperty(ctx, retval, "rss", JSValueToObject(ctx, JSValueMakeNumber(ctx, rss), exception));
+
+    return retval;
+}
+
+
 static void
 skipShebang(FILE* const fp) {
     int c = fgetc(fp);
@@ -164,6 +186,7 @@ setupJSGlobals(JSContextRef ctx, JSObjectRef jobjGlobal, int argc, const char** 
     setProperty(ctx, jsProcess, "env", JSObjectMake(ctx, NULL, NULL));
     setProperty(ctx, jsProcess, "title",   makeJSObjectFromCString(ctx, CommandTitle));
     setProperty(ctx, jsProcess, "version", makeJSObjectFromCString(ctx, CommandVersion));
+    setFunc(ctx, jsProcess, "memoryUsage", getMemoryUsage);
 
     // process.argv
     JSValueRef jvals[argc];

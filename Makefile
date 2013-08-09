@@ -1,5 +1,5 @@
 
-OPTIMIZE := -O4
+OPTIMIZE := -O2
 
 all: jshello jsxhello
 
@@ -9,6 +9,8 @@ jshello: nore
 jsxhello: nore
 	JSX_RUNJS=./nore jsx --run hello.jsx foo bar
 
-nore: main.c
-	$(CC) $(OPTIMIZE) -Wall -Wextra -g -framework JavaScriptCore -o $@ $<
+nore: main.c lib/libuv.a
+	$(CC) $(OPTIMIZE) -Iinclude -Wall -Wextra -g -framework JavaScriptCore -framework CoreFoundation -framework CoreServices -o $@ $< lib/libuv.a
 
+lib/libuv.a:
+	prefix=$$PWD ; cd libuv && sh autogen.sh && ./configure --prefix=$$prefix && make install
